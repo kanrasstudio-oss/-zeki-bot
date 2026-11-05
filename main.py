@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 import requests
@@ -70,14 +71,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Kullanıcıya operasyonun başladığını bildirelim
     processing_msg = await update.message.reply_text("Strateji analiz ediliyor, plan hazırlanıyor...")
     
-    # Grok'tan profesyonel yanıt al
-    reply_text = ask_grok(user_message)
+    # Grok'tan profesyonel yanıt al (Blocking isteği thread havuzunda çalıştırarak event loop'u bloklamıyoruz)
+    loop = asyncio.get_running_loop()
+    reply_text = await loop.run_in_executor(None, ask_grok, user_message)
     
     # Bildirim mesajını silip gerçek yanıtı iletelim
     await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processing_msg.message_id)
     await update.message.reply_text(reply_text)
 
-def main():
+async def main():
     if not TELEGRAM_TOKEN or not GROK_API_KEY:
         logger.error("TELEGRAM_TOKEN veya GROK_API_KEY tanımlanmamış! Lütfen Render Environment ayarlarını kontrol et.")
         return
@@ -89,7 +91,18 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
     logger.info("Otonom Asistan Bot başlatılıyor...")
-    application.run_polling()
+    
+    # Asenkron olarak botu başlat ve çalıştır
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+
+    # Botun kapanmaması için sonsuz döngü
+    stop_signal = asyncio.Event()
+    await stop_signal.wait()
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot durduruldu.")
