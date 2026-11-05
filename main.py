@@ -13,15 +13,15 @@ logger = logging.getLogger(__name__)
 
 # Render Environment üzerinden token ve anahtarları alıyoruz
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GROQ_API_KEY = os.getenv("GROK_API_KEY")  # Render'da anahtarı GROK_API_KEY olarak kaydettiğin için buradan okuyoruz
+GROQ_API_KEY = os.getenv("GROK_API_KEY")
 
-# Groq API Endpoint ve Güncel Modeli
+# Groq API Endpoint ve Güncel Çalışan Model
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 def ask_groq(prompt: str) -> str:
-    """Groq API'ye istek atarak otonom asistan rolünde yanıt alır."""
+    """Groq API'ye istek atar."""
     if not GROQ_API_KEY:
-        return "Hata: GROK_API_KEY Render Environment içerisinde tanımlı değil!"
+        return "Hata: GROQ_API_KEY Render Environment içinde tanımlı değil!"
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
@@ -37,7 +37,7 @@ def ask_groq(prompt: str) -> str:
     )
     
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama-3.1-70b-versatile",  # Groq'un kararlı ve standart modeli
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
@@ -46,36 +46,45 @@ def ask_groq(prompt: str) -> str:
     }
     
     try:
-        response = requests.post(GROQ_API_URL, json=payload, headers=headers, timeout=45)
+        response = requests.post(GROQ_API_URL, json=payload, headers=headers, timeout=15)
         logger.info(f"Groq API Yanıt Kodu: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
             return data["choices"][0]["message"]["content"]
         else:
-            return f"API Hatası (Kod {response.status_code}): {response.text}"
+            return f"Groq API Hatası (Kod {response.status_code}): {response.text}"
+    except requests.exceptions.Timeout:
+        return "Hata: Groq API yanıt süresi aşıldı (Timeout)."
     except Exception as e:
         logger.error(f"Bağlantı hatası: {e}")
         return f"Bağlantı hatası oluştu: {str(e)}"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Telegram'dan gelen mesajları işler ve Groq'a yönlendirir."""
+    """Telegram'dan gelen mesajları işler."""
     user_message = update.message.text
     user_name = update.effective_user.first_name
     
     logger.info(f"Komut alındı ({user_name}): {user_message}")
     
-    processing_msg = await update.message.reply_text("Strateji analiz ediliyor, plan hazırlanıyor...")
+    processing_msg = await update.message.reply_text("Analiz ediliyor...")
     
-    loop = asyncio.get_running_loop()
-    reply_text = await loop.run_in_executor(None, ask_groq, user_message)
+    try:
+        loop = asyncio.get_running_loop()
+        reply_text = await loop.run_in_executor(None, ask_groq, user_message)
+    except Exception as e:
+        reply_text = f"İşlem sırasında kritik hata oluştu: {str(e)}"
     
-    await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processing_msg.message_id)
+    try:
+        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processing_msg.message_id)
+    except:
+        pass
+        
     await update.message.reply_text(reply_text)
 
 async def main():
     if not TELEGRAM_TOKEN or not GROQ_API_KEY:
-        logger.error("TELEGRAM_TOKEN veya GROK_API_KEY tanımlanmamış!")
+        logger.error("TELEGRAM_TOKEN veya GROQ_API_KEY tanımlanmamış!")
         return
 
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
