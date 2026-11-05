@@ -20,8 +20,11 @@ GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 def ask_grok(prompt: str) -> str:
     """Grok API'ye istek atarak otonom asistan rolünde profesyonel yanıt alır."""
+    if not GROK_API_KEY:
+        return "Hata: GROK_API_KEY Render Environment içerisinde tanımlı değil!"
+
     headers = {
-        "Authorization": f"Bearer {GROK_API_KEY}",
+        "Authorization": f"Bearer {GROK_API_KEY.strip()}",
         "Content-Type": "application/json"
     }
     
@@ -35,7 +38,7 @@ def ask_grok(prompt: str) -> str:
     )
     
     payload = {
-        "model": "grok-beta",
+        "model": "grok-2-latest",  # Güncel xAI modeli
         "messages": [
             {
                 "role": "system",
@@ -51,12 +54,15 @@ def ask_grok(prompt: str) -> str:
     
     try:
         response = requests.post(GROK_API_URL, json=payload, headers=headers, timeout=45)
+        # Hata ayıklama için yanıt kodunu ve detayını loglayalım
+        logger.info(f"Grok API Yanıt Kodu: {response.status_code}")
+        logger.info(f"Grok API Yanıt İçeriği: {response.text}")
+        
         if response.status_code == 200:
             data = response.json()
             return data["choices"][0]["message"]["content"]
         else:
-            logger.error(f"Grok API Hatası: {response.status_code} - {response.text}")
-            return "Üzgünüm, şu an analiz yaparken bir API hatası oluştu."
+            return f"Grok API Hatası (Kod {response.status_code}): {response.text}"
     except Exception as e:
         logger.error(f"Bağlantı hatası: {e}")
         return f"Bağlantı hatası oluştu: {str(e)}"
@@ -68,14 +74,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     logger.info(f"Komut alındı ({user_name}): {user_message}")
     
-    # Kullanıcıya operasyonun başladığını bildirelim
     processing_msg = await update.message.reply_text("Strateji analiz ediliyor, plan hazırlanıyor...")
     
-    # Grok'tan profesyonel yanıt al (Blocking isteği thread havuzunda çalıştırarak event loop'u bloklamıyoruz)
     loop = asyncio.get_running_loop()
     reply_text = await loop.run_in_executor(None, ask_grok, user_message)
     
-    # Bildirim mesajını silip gerçek yanıtı iletelim
     await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processing_msg.message_id)
     await update.message.reply_text(reply_text)
 
@@ -84,20 +87,15 @@ async def main():
         logger.error("TELEGRAM_TOKEN veya GROK_API_KEY tanımlanmamış! Lütfen Render Environment ayarlarını kontrol et.")
         return
 
-    # Telegram Bot uygulamasını başlat
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-    # Tüm metin mesajlarını yakala
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
     logger.info("Otonom Asistan Bot başlatılıyor...")
     
-    # Asenkron olarak botu başlat ve çalıştır
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
 
-    # Botun kapanmaması için sonsuz döngü
     stop_signal = asyncio.Event()
     await stop_signal.wait()
 
