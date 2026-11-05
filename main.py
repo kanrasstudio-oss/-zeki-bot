@@ -1,7 +1,6 @@
 import os
 import json
 import logging
-import time
 import re
 from datetime import datetime
 from telegram import Update
@@ -27,11 +26,16 @@ def hafizayi_oku():
     try:
         with open(MEMORY_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if "kullanici_bilgisi" not in data: data["kullanici_bilgisi"] = {}
-            if "konusmalar" not in data: data["konusmalar"] = []
-            if "ogrenilenler" not in data: data["ogrenilenler"] = []
-            if "hedefler" not in data: data["hedefler"] = []
-            if "notlar" not in data: data["notlar"] = []
+            if "kullanici_bilgisi" not in data:
+                data["kullanici_bilgisi"] = {}
+            if "konusmalar" not in data:
+                data["konusmalar"] = []
+            if "ogrenilenler" not in data:
+                data["ogrenilenler"] = []
+            if "hedefler" not in data:
+                data["hedefler"] = []
+            if "notlar" not in data:
+                data["notlar"] = []
             return data
     except:
         return {"kullanici_bilgisi": {}, "konusmalar": [], "ogrenilenler": [], "hedefler": [], "notlar": []}
@@ -83,12 +87,7 @@ def grok_cevap(mesaj):
         response = grok_client.chat.completions.create(
             model="grok-3-mini",
             messages=[
-                {"role": "system", "content": f"""Sen kullanıcının en yakın, zeki, samimi asistanısın.
-                Türkçe konuş, kısa ve doğal ol, robot gibi konuşma.
-                Kullanıcı hakkında bildiklerin: {ozet}
-                Adını biliyorsan kullan.
-                Asla uydurma, bilmiyorsan 'bunu tam bilmiyorum' de.
-                """},
+                {"role": "system", "content": f"Sen kullanicinin en yakin, zeki, samimi asistanisin. Turkce konus, kisa ve dogal ol, robot gibi konusma. Kullanici hakkinda bildiklerin: {ozet} Adini biliyorsan kullan. Asla uydurma, bilmiyorsan bunu tam bilmiyorum de."},
                 {"role": "user", "content": mesaj}
             ],
             max_tokens=600,
@@ -102,14 +101,14 @@ def grok_cevap(mesaj):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ad = hafiza["kullanici_bilgisi"].get("ad", "")
     if ad:
-        await update.message.reply_text(f"Hoş geldin {ad}! Seni hatırlıyorum. Grok da açık, ne istersen sor.")
+        await update.message.reply_text(f"Hos geldin {ad}! Seni hatirliyorum. Grok da acik, ne istersen sor.")
     else:
-        await update.message.reply_text("Selam! Ben senin zeki asistanınım. Hafızam var + Grok zekası var. Adın ne?")
+        await update.message.reply_text("Selam! Ben senin zeki asistaninim. Hafizam var + Grok zekasi var. Adin ne?")
 
 async def hafiza_goster(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ad = hafiza["kullanici_bilgisi"].get("ad", "henüz bilmiyorum")
+    ad = hafiza["kullanici_bilgisi"].get("ad", "henuz bilmiyorum")
     notlar = hafiza["notlar"][-5:]
-    mesaj = f"🧠 Hafızamda bunlar var:\n\nAdın: {ad}\nÖğrendiklerim: {len(hafiza['ogrenilenler'])} şey\nHedeflerin: {len(hafiza['hedefler'])} tane\nNotların: {len(hafiza['notlar'])} tane\n\nSon notların:\n"
+    mesaj = f"Hafizamda bunlar var:\n\nAdin: {ad}\nOgrendiklerim: {len(hafiza['ogrenilenler'])} sey\nHedeflerin: {len(hafiza['hedefler'])} tane\nNotlarin: {len(hafiza['notlar'])} tane\n\nSon notlarin:\n"
     for n in notlar:
         mesaj += f"- {n['not']}\n"
     await update.message.reply_text(mesaj)
@@ -118,7 +117,7 @@ async def sifirla(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global hafiza
     hafiza = {"kullanici_bilgisi": {}, "konusmalar": [], "ogrenilenler": [], "hedefler": [], "notlar": []}
     hafizaya_yaz(hafiza)
-    await update.message.reply_text("Hafızayı sıfırladım. Yeniden tanışalım, adın ne?")
+    await update.message.reply_text("Hafizayi sifirladim. Yeniden tanisalim, adin ne?")
 
 async def cevapla(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -131,47 +130,41 @@ async def cevapla(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hafiza["konusmalar"] = hafiza["konusmalar"][-200:]
         sonuc = akilli_ogren(mesaj)
         if sonuc == "not":
-            await update.message.reply_text("Not ettim, unutmayacağım.")
+            await update.message.reply_text("Not ettim, unutmayacagim.")
             return
         hafizaya_yaz(hafiza)
         alt = mesaj.lower()
-        if alt in ["/hafiza", "hafızamda ne var", "ne hatırlıyorsun"]:
+        if alt in ["/hafiza", "hafizamda ne var", "ne hatirliyorsun"]:
             await hafiza_goster(update, context)
             return
         cevap = grok_cevap(mesaj)
         if not cevap:
             ad = hafiza["kullanici_bilgisi"].get("ad", "")
-            if "nasılsın" in alt:
-                cevap = f"İyiyim {ad}, sen nasılsın?" if ad else "İyiyim, sen nasılsın?"
+            if "nasilsin" in alt:
+                cevap = f"Iyiyim {ad}, sen nasilsin?" if ad else "Iyiyim, sen nasilsin?"
             elif "selam" in alt or "merhaba" in alt:
                 cevap = f"Selam {ad}!" if ad else "Selam!"
             else:
-                cevap = "Anladım, hafızama ekledim. Grok'a şu an ulaşamıyorum ama ben buradayım."
+                cevap = "Anladim, hafizama ekledim. Grok'a su an ulasamiyorum ama ben buradayim."
         await update.message.reply_text(cevap)
     except Exception as e:
         logger.error(f"Cevap hatasi: {e}")
         try:
-            await update.message.reply_text("Küçük bir takılma oldu ama buradayım, tekrar yazar mısın?")
+            await update.message.reply_text("Kucuk bir takilma oldu ama buradayim, tekrar yazar misin?")
         except:
             pass
 
 def main():
     if not TOKEN:
         logger.error("TELEGRAM_TOKEN yok! Render Env'e ekle.")
-        time.sleep(10)
         return
-    while True:
-        try:
-            app = ApplicationBuilder().token(TOKEN).build()
-            app.add_handler(CommandHandler("start", start))
-            app.add_handler(CommandHandler("hafiza", hafiza_goster))
-            app.add_handler(CommandHandler("sifirla", sifirla))
-            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, cevapla))
-            logger.info("Bot + Grok calisiyor...")
-            app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
-        except Exception as e:
-            logger.error(f"Bot coktu, 5 sn sonra yeniden: {e}")
-            time.sleep(5)
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("hafiza", hafiza_goster))
+    app.add_handler(CommandHandler("sifirla", sifirla))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, cevapla))
+    logger.info("Bot + Grok calisiyor...")
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
